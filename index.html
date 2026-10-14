@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BBM Interaktif MediaPipe - Kata Hubung Interaktif</title>
+  
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+      text-align: center;
+      margin: 0;
+      padding: 10px;
+      min-height: 100vh;
+    }
+    h1 {
+      color: #1e3a8a;
+      font-size: 1.5rem;
+      margin-bottom: 2px;
+    }
+    #status {
+      font-weight: bold;
+      color: #d97706;
+      font-size: 0.95rem;
+      margin-bottom: 8px;
+    }
+    .game-container {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+    .camera-box {
+      position: relative;
+      width: 480px;
+      height: 360px;
+      border: 4px solid #2563eb;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+      background: #000;
+    }
+    video { display: none; }
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      transform: scaleX(-1);
+    }
+    .floating-question {
+      position: absolute;
+      top: 15px;
+      left: 15px;
+      right: 15px;
+      background: rgba(30, 58, 138, 0.85);
+      color: white;
+      padding: 10px;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      font-weight: bold;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+      backdrop-filter: blur(4px);
+      z-index: 10;
+    }
+    .feedback-banner {
+      position: absolute;
+      bottom: 15px;
+      left: 15px;
+      right: 15px;
+      padding: 8px;
+      border-radius: 8px;
+      font-size: 1.1rem;
+      font-weight: bold;
+      display: none;
+      z-index: 15;
+      text-align: center;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    .feedback-banner.correct {
+      background: rgba(22, 163, 74, 0.9);
+      color: white;
+    }
+    .feedback-banner.wrong {
+      background: rgba(220, 38, 38, 0.9);
+      color: white;
+    }
+    .panel-bm {
+      width: 360px;
+      background: #ffffff;
+      padding: 18px;
+      border-radius: 16px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+      text-align: left;
+    }
+    .panel-bm h3 {
+      color: #1e3a8a;
+      margin-top: 0;
+      border-bottom: 2px solid #e2e8f0;
+      padding-bottom: 6px;
+      font-size: 1.1rem;
+    }
+    .card {
+      background: #eff6ff;
+      border: 2px solid #3b82f6;
+      padding: 10px;
+      margin: 8px 0;
+      border-radius: 10px;
+      font-weight: bold;
+      color: #1e40af;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .card.hovered {
+      background: #fef08a;
+      border-color: #ca8a04;
+      transform: scale(1.02);
+    }
+    .dropzone {
+      border: 3px dashed #94a3b8;
+      background: #f8fafc;
+      min-height: 60px;
+      border-radius: 10px;
+      padding: 8px;
+      margin-top: 10px;
+      text-align: center;
+      color: #475569;
+    }
+    .gesture-guide {
+      margin-top: 12px;
+      background: #f1f5f9;
+      padding: 10px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      color: #334155;
+      border-left: 4px solid #2563eb;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>BBM Interaktif: Jambatan Kata Hubung</h1>
+  <p id="status">Sila tunjukkan tangan di hadapan kamera...</p>
+
+  <div class="game-container">
+    <div class="camera-box">
+      <div id="floating-task" class="floating-question">Memuatkan soalan...</div>
+      <div id="feedback-box" class="feedback-banner">Betul! Syabas.</div>
+      <video id="webcam" autoplay playsinline></video>
+      <canvas id="canvas_out" width="480" height="360"></canvas>
+    </div>
+
+    <div class="panel-bm">
+      <h3 id="panel-title">Aktiviti Kata Hubung</h3>
+      <p style="font-size: 0.85rem; color: #475569; margin-top: 0;">Gunakan <b>1 jari (telunjuk)</b> untuk memilih kad frasa.</p>
+      
+      <div id="word-pool"></div>
+
+      <div class="dropzone">
+        <strong style="font-size: 0.85rem;">Zon Susun Ayat:</strong>
+        <p id="sentence-result" style="margin: 4px 0; color: #15803d; font-weight: bold; font-size: 0.95rem;">(Belum dipilih)</p>
+      </div>
+
+      <div class="gesture-guide">
+        💡 <b>Panduan Isyarat Tangan:</b><br>
+        ☝️ <b>1 Jari Telunjuk:</b> Pilih & seret jawapan<br>
+        🖐️ <b>Buka 5 Jari:</b> Set Semula<br>
+        ✊ <b>Genggam Penumbuk:</b> Soalan Seterusnya
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const senaraiAktiviti = [
+      {
+        tajuk: "Soalan 1: Kata Hubung 'dan'",
+        soalanTeks: "Ayah menanam cili [ ? ] terung.",
+        frasa: [
+          { id: '1', text: "Ayah menanam cili" },
+          { id: '2', text: "dan" },
+          { id: '3', text: "terung." }
+        ],
+        jawapanLengkap: "Ayah menanam cili dan terung."
+      },
+      {
+        tajuk: "Soalan 2: Kata Hubung 'atau'",
+        soalanTeks: "Kamu mahu membeli benih cili [ ? ] baja?",
+        frasa: [
+          { id: '1', text: "Kamu mahu membeli benih cili" },
+          { id: '2', text: "atau" },
+          { id: '3', text: "baja?" }
+        ],
+        jawapanLengkap: "Kamu mahu membeli benih cili atau baja?"
+      },
+      {
+        tajuk: "Soalan 3: Kata Hubung 'tetapi'",
+        soalanTeks: "Pokok itu kecil [ ? ] buahnya banyak.",
+        frasa: [
+          { id: '1', text: "Pokok itu kecil" },
+          { id: '2', text: "tetapi" },
+          { id: '3', text: "buahnya banyak." }
+        ],
+        jawapanLengkap: "Pokok itu kecil tetapi buahnya banyak."
+      }
+    ];
+
+    let currentIndex = 0;
+    let selectedPhrases = [];
+    let hoverTimeout = null;
+    let activeTarget = null;
+    let gestureCooldown = false;
+
+    function mainkanBunyi(jenis) {
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        
+        if (jenis === 'betul') {
+          osc.frequency.setValueAtTime(523.25, audioCtx.currentTime);
+          osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.1);
+          osc.frequency.setValueAtTime(783.99, audioCtx.currentTime + 0.2);
+        } else {
+          osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+          osc.frequency.setValueAtTime(200, audioCtx.currentTime + 0.15);
+        }
+
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.4);
+      } catch (e) {}
+    }
+
+    function paparkanBanner(status, mesej) {
+      const box = document.getElementById('feedback-box');
+      box.className = `feedback-banner ${status}`;
+      box.innerText = mesej;
+      box.style.display = 'block';
+      setTimeout(() => { box.style.display = 'none'; }, 2500);
+    }
+
+    function muatTurunSoalan() {
+      const item = senaraiAktiviti[currentIndex];
+      document.getElementById('panel-title').innerText = item.tajuk;
+      document.getElementById('floating-task').innerText = item.soalanTeks;
+      
+      const pool = document.getElementById('word-pool');
+      pool.innerHTML = '';
+      
+      item.frasa.forEach(f => {
+        const div = document.createElement('div');
+        div.className = 'card';
+        div.innerText = f.text;
+        div.setAttribute('data-text', f.text);
+        pool.appendChild(div);
+      });
+      selectedPhrases = [];
+      document.getElementById('sentence-result').innerText = "(Belum dipilih)";
+    }
+
+    function resetAyat() {
+      muatTurunSoalan();
+    }
+
+    function soalanSeterusnya() {
+      currentIndex = (currentIndex + 1) % senaraiAktiviti.length;
+      muatTurunSoalan();
+    }
+
+    muatTurunSoalan();
+
+    const videoElement = document.getElementById('webcam');
+    const canvasElement = document.getElementById('canvas_out');
+    const canvasCtx = canvasElement.getContext('2d');
+    const statusText = document.getElementById('status');
+    const sentenceResult = document.getElementById('sentence-result');
+
+    function kiraJariTerangkat(landmarks) {
+      let jariNaik = 0;
+      const tips = [8, 12, 16, 20];
+      const joints = [6, 10, 14, 18];
+      
+      tips.forEach((tip, idx) => {
+        if (landmarks[tip].y < landmarks[joints[idx]].y) {
+          jariNaik++;
+        }
+      });
+      if (Math.abs(landmarks[4].x - landmarks[2].x) > 0.05) {
+        jariNaik++;
+      }
+      return jariNaik;
+    }
+
+    function onResults(results) {
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+        statusText.innerText = "Tangan dikesan! Aktif mengawal BBM.";
+        statusText.style.color = "#16a34a";
+
+        results.multiHandLandmarks.forEach((landmarks) => {
+          const jumlahJari = kiraJariTerangkat(landmarks);
+
+          // PENGESANAN GESTURE KAWALAN UTAMA
+          if (!gestureCooldown) {
+            if (jumlahJari >= 4) {
+              // Buka 5 Jari -> Set Semula
+              gestureCooldown = true;
+              resetAyat();
+              paparkanBanner('wrong', '🔄 Set Semula (Buka 5 Jari)');
+              setTimeout(() => { gestureCooldown = false; }, 1500);
+            } else if (jumlahJari <= 1) {
+              // Genggam Penumbuk -> Soalan Seterusnya
+              gestureCooldown = true;
+              soalanSeterusnya();
+              paparkanBanner('correct', '➡️ Soalan Seterusnya (Genggam Penumbuk)');
+              setTimeout(() => { gestureCooldown = false; }, 1500);
+            }
+          }
+
+          // KAWALAN PILIH & SERET JAWAPAN (Guna 1 Jari Telunjuk)
+          const indexFinger = landmarks[8];
+          const screenX = window.innerWidth / 2 - 240 + (indexFinger.x * 480);
+          const screenY = 130 + (indexFinger.y * 360);
+
+          const cursorX = indexFinger.x * canvasElement.width;
+          const cursorY = indexFinger.y * canvasElement.height;
+
+          canvasCtx.beginPath();
+          canvasCtx.arc(cursorX, cursorY, 10, 0, 2 * Math.PI);
+          canvasCtx.fillStyle = "#22c55e";
+          canvasCtx.fill();
+          canvasCtx.lineWidth = 2;
+          canvasCtx.strokeStyle = "#ffffff";
+          canvasCtx.stroke();
+
+          let targetCard = null;
+          document.querySelectorAll('.card').forEach(card => {
+            const rect = card.getBoundingClientRect();
+            if (
+              window.innerWidth - screenX >= rect.left &&
+              window.innerWidth - screenX <= rect.right &&
+              screenY >= rect.top &&
+              screenY <= rect.bottom &&
+              card.style.display !== 'none'
+            ) {
+              targetCard = card;
+            }
+          });
+
+          if (targetCard) {
+            targetCard.classList.add('hovered');
+            const cardText = targetCard.getAttribute('data-text');
+
+            if (activeTarget !== cardText) {
+              activeTarget = cardText;
+              if (hoverTimeout) clearTimeout(hoverTimeout);
+
+              hoverTimeout = setTimeout(() => {
+                selectedPhrases.push(cardText);
+                sentenceResult.innerText = selectedPhrases.join(" ");
+                targetCard.style.display = 'none';
+
+                const aktivitiSemasa = senaraiAktiviti[currentIndex];
+                if (selectedPhrases.length === aktivitiSemasa.frasa.length) {
+                  const ayatPenuhBinaan = selectedPhrases.join(" ");
+                  if (ayatPenuhBinaan === aktivitiSemasa.jawapanLengkap) {
+                    mainkanBunyi('betul');
+                    paparkanBanner('correct', '✨ TEPAT & BETUL! Syabas!');
+                  } else {
+                    mainkanBunyi('salah');
+                    paparkanBanner('wrong', '❌ Kurang Tepat. Cuba Semula!');
+                  }
+                } else {
+                  mainkanBunyi('betul');
+                }
+                activeTarget = null;
+              }, 800);
+            }
+          } else {
+            if (activeTarget) {
+              clearTimeout(hoverTimeout);
+              activeTarget = null;
+            }
+            document.querySelectorAll('.card').forEach(c => c.classList.remove('hovered'));
+          }
+        });
+      } else {
+        statusText.innerText = "Sila tunjukkan tangan anda di hadapan kamera.";
+        statusText.style.color = "#d97706";
+      }
+      canvasCtx.restore();
+    }
+
+    const hands = new Hands({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+    });
+
+    hands.setOptions({
+      maxNumHands: 1,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.6,
+      minTrackingConfidence: 0.6
+    });
+
+    hands.onResults(onResults);
+
+    const camera = new Camera(videoElement, {
+      onFrame: async () => {
+        await hands.send({ image: videoElement });
+      },
+      width: 480,
+      height: 360
+    });
+
+    camera.start();
+  </script>
+
+</body>
+</html>
